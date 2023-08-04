@@ -23,4 +23,4 @@ y_vec = y_vec.reshape(600)
 
 output = 1 if find_sum(y_vec, w)>0 else -1
 
-print('It is a 8') if output == 1 else -1
+print('It is a 8') if output == 1 else print('It is NOT a 8')
