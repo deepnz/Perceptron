@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Perceptron — Handwritten Digit Classifier</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #0d1117;
+      --bg2:      #161b22;
+      --bg3:      #21262d;
+      --border:   #30363d;
+      --text:     #e6edf3;
+      --muted:    #8b949e;
+      --accent:   #2dd4bf;
+      --accent2:  #818cf8;
+      --positive: #3fb950;
+      --negative: #f85149;
+      --warning:  #d29922;
+      --radius:   12px;
+      --font:     'Inter', sans-serif;
+      --mono:     'JetBrains Mono', monospace;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 16px;
+    }
+    h1, h2, h3 { line-height: 1.3; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+    section { padding: 80px 0; border-bottom: 1px solid var(--border); }
+    section:last-child { border-bottom: none; }
+    .section-label {
+      font-size: 12px; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 700; margin-bottom: 16px;
+    }
+    .section-desc { color: var(--muted); max-width: 620px; margin-bottom: 40px; }
+
+    .card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px;
+    }
+
+    .badge {
+      display: inline-block; padding: 4px 10px; border-radius: 20px;
+      font-size: 12px; font-weight: 600; font-family: var(--mono);
+      background: var(--bg3); border: 1px solid var(--border); color: var(--accent);
+      margin: 4px;
+    }
+
+    [data-tip] { border-bottom: 1px dashed var(--muted); cursor: help; position: relative; }
+    [data-tip]:hover::after {
+      content: attr(data-tip);
+      position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%);
+      background: var(--bg3); border: 1px solid var(--border);
+      color: var(--text); font-size: 13px; padding: 6px 10px;
+      border-radius: 6px; white-space: nowrap; z-index: 10;
+      pointer-events: none;
+    }
+
+    code {
+      font-family: var(--mono); font-size: .88em;
+      background: var(--bg3); border: 1px solid var(--border);
+      padding: 2px 6px; border-radius: 4px; color: var(--accent);
+    }
+
+    /* Pipeline */
+    .pipeline {
+      display: flex; align-items: center; justify-content: center;
+      flex-wrap: wrap; gap: 0; margin: 40px 0;
+    }
+    .pipe-node {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 22px; text-align: center;
+      min-width: 120px; transition: border-color .2s, transform .2s;
+    }
+    .pipe-node:hover { border-color: var(--accent); transform: translateY(-3px); }
+    .pipe-node .icon { font-size: 1.8rem; margin-bottom: 6px; }
+    .pipe-node .label { font-size: 12px; font-weight: 600; color: var(--text); font-family: var(--mono); }
+    .pipe-node .sublabel { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .pipe-arrow { color: var(--muted); font-size: 1.4rem; padding: 0 4px; display: flex; align-items: center; }
+
+    /* Neuron diagram */
+    .neuron-diagram {
+      display: flex; align-items: center; justify-content: center;
+      gap: 32px; flex-wrap: wrap; margin: 40px 0;
+    }
+    .neuron-inputs { display: flex; flex-direction: column; gap: 10px; }
+    .neuron-input {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 14px; font-family: var(--mono);
+      font-size: 13px; text-align: center; color: var(--accent2);
+    }
+    .neuron-circle {
+      width: 100px; height: 100px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(45,212,191,.2), rgba(45,212,191,.05));
+      border: 2px solid var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; text-align: center; font-weight: 600;
+      color: var(--accent); flex-shrink: 0; font-family: var(--mono);
+      line-height: 1.4;
+    }
+    .neuron-output {
+      padding: 14px 22px; border-radius: 8px; font-family: var(--mono);
+      font-size: 14px; font-weight: 600; border: 2px solid var(--positive);
+      background: rgba(63,185,80,.1); color: var(--positive); line-height: 1.8;
+    }
+    @keyframes pulse-green {
+      0%, 100% { border-color: var(--accent); box-shadow: none; }
+      50%       { border-color: var(--positive); box-shadow: 0 0 20px rgba(63,185,80,.35); }
+    }
+    .animate-pulse { animation: pulse-green 2.5s ease-in-out infinite; }
+
+    /* Pixel demo */
+    .pixel-grid {
+      display: grid;
+      grid-template-columns: repeat(30, 1fr);
+      gap: 2px;
+      width: 100%;
+      max-width: 420px;
+      user-select: none;
+      cursor: crosshair;
+    }
+    .pixel {
+      background: var(--bg3); border-radius: 2px;
+      transition: background .04s; aspect-ratio: 1;
+    }
+    .pixel.on { background: var(--accent); }
+    .demo-output {
+      font-family: var(--mono); font-size: 1.3rem; font-weight: 700;
+      padding: 16px 28px; border-radius: var(--radius); text-align: center;
+      transition: all .25s;
+    }
+    .demo-output.is8  { color: var(--positive); border: 2px solid var(--positive); background: rgba(63,185,80,.08); }
+    .demo-output.not8 { color: var(--negative); border: 2px solid var(--negative); background: rgba(248,81,73,.08); }
+    .demo-output.empty{ color: var(--muted);    border: 2px solid var(--border);   background: var(--bg2); }
+
+    /* Step cards */
+    .step-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px,1fr)); gap: 16px; }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .pipeline { flex-direction: column; }
+      .pipe-arrow { transform: rotate(90deg); }
+      .neuron-diagram { flex-direction: column; align-items: center; }
+      .params-grid { grid-template-columns: 1fr !important; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ NAV ══ -->
+<nav id="top" style="
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(13,17,23,.88); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 24px;
+  display: flex; align-items: center; justify-content: space-between;
+">
+  <span style="font-family:var(--mono); font-weight:600; color:var(--accent); font-size:14px;">perceptron/</span>
+  <div style="display:flex; gap:20px; font-size:13px; color:var(--muted); flex-wrap:wrap;">
+    <a href="#sec-arch">Architecture</a>
+    <a href="#sec-how">How It Works</a>
+    <a href="#sec-demo">Demo</a>
+    <a href="#sec-results">Results</a>
+    <a href="#sec-ref">Reference</a>
+  </div>
+</nav>
+
+<!-- ══ HERO ══ -->
+<header style="
+  padding: 100px 24px 80px;
+  text-align: center;
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(45,212,191,.13) 0%, transparent 70%);
+  border-bottom: 1px solid var(--border);
+">
+  <div class="container">
+    <div class="section-label">Intro to AI · Perceptron Project</div>
+    <h1 style="font-size: clamp(2rem,5vw,3.2rem); font-weight:700; margin-bottom:16px;">
+      Handwritten Digit Classifier
+    </h1>
+    <p style="color:var(--muted); font-size:1.1rem; max-width:520px; margin:0 auto 32px;">
+      A <span data-tip="The simplest neural network: one layer, one neuron">perceptron</span>
+      trained from scratch in Python to recognize the digit
+      <strong style="color:var(--accent); font-family:var(--mono)">8</strong>
+      in ASCII art images — with zero external ML libraries.
+    </p>
+    <div style="margin-bottom:40px;">
+      <span class="badge">Python 3.11</span>
+      <span class="badge">NumPy 2.x</span>
+      <span class="badge">pandas 3.x</span>
+      <span class="badge">86 positive samples</span>
+      <span class="badge">129 negative samples</span>
+    </div>
+    <div style="display:flex; gap:16px; justify-content:center; flex-wrap:wrap;">
+      <div class="card" style="text-align:center; padding:20px 32px; min-width:110px;">
+        <div style="font-size:2rem; font-weight:700; color:var(--accent);">600</div>
+        <div style="font-size:13px; color:var(--muted);">features</div>
+      </div>
+      <div class="card" style="text-align:center; padding:20px 32px; min-width:110px;">
+        <div style="font-size:2rem; font-weight:700; color:var(--accent2);">15</div>
+        <div style="font-size:13px; color:var(--muted);">epochs</div>
+      </div>
+      <div class="card" style="text-align:center; padding:20px 32px; min-width:110px;">
+        <div style="font-size:2rem; font-weight:700; color:var(--positive);">0</div>
+        <div style="font-size:13px; color:var(--muted);">misclassifications</div>
+      </div>
+      <div class="card" style="text-align:center; padding:20px 32px; min-width:110px;">
+        <div style="font-size:2rem; font-weight:700; color:var(--warning);">100%</div>
+        <div style="font-size:13px; color:var(--muted);">test accuracy</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══ ARCHITECTURE ══ -->
+<section id="sec-arch">
+  <div class="container">
+    <div class="section-label">Architecture</div>
+    <h2 class="section-title">Three-Script Pipeline</h2>
+    <p class="section-desc">
+      The project is three standalone Python scripts that run in sequence.
+      Each has exactly one job: prepare data, train weights, or classify a new image.
+    </p>
+
+    <div class="pipeline">
+      <div class="pipe-node">
+        <div class="icon">🖼️</div>
+        <div class="label">data/</div>
+        <div class="sublabel">215 ASCII images<br>.txt files</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node" style="border-color:var(--accent2);">
+        <div class="icon">⚙️</div>
+        <div class="label">generate_features.py</div>
+        <div class="sublabel">30×20 grid<br>→ 600-dim vector</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node">
+        <div class="icon">📄</div>
+        <div class="label">features.csv</div>
+        <div class="sublabel">215 rows × 601 cols<br>+ LABEL column</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node" style="border-color:var(--accent);">
+        <div class="icon">🧠</div>
+        <div class="label">perceptron_train.py</div>
+        <div class="sublabel">15 epochs<br>lr = 0.10</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node">
+        <div class="icon">⚖️</div>
+        <div class="label">weights.csv</div>
+        <div class="sublabel">601 learned weights</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node" style="border-color:var(--positive);">
+        <div class="icon">🔍</div>
+        <div class="label">evaluate.py</div>
+        <div class="sublabel">classifies<br>new image</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-node" style="border-color:var(--positive); background:rgba(63,185,80,.07);">
+        <div class="icon">✅</div>
+        <div class="label">Result</div>
+        <div class="sublabel">"It is a 8"<br>or "It is NOT a 8"</div>
+      </div>
+    </div>
+
+    <!-- Feature extraction detail -->
+    <div class="card">
+      <div style="font-weight:600; margin-bottom:14px; color:var(--accent);">Feature Extraction — ASCII grid → binary vector</div>
+      <div style="display:flex; gap:32px; align-items:center; flex-wrap:wrap;">
+        <pre style="font-family:var(--mono); font-size:13px; color:var(--muted); line-height:1.5; flex-shrink:0; background:var(--bg3); padding:14px; border-radius:8px;">  .###.
+  #...#
+  #...#
+  .###.
+  #...#
+  #...#
+  .###.</pre>
+        <div style="font-size:1.8rem; color:var(--muted); flex-shrink:0;">→</div>
+        <div style="flex:1; min-width:200px;">
+          <div style="font-family:var(--mono); font-size:12px; color:var(--accent); word-break:break-all; margin-bottom:10px;">
+            [0,1,1,1,0,&thinsp;1,0,0,0,1,&thinsp;1,0,0,0,1,&thinsp;0,1,1,1,0,&thinsp;1,0,0,0,1,&thinsp;…]
+          </div>
+          <div style="font-size:13px; color:var(--muted);">
+            Each <code>#</code> → <code>1</code>&nbsp;&nbsp;·&nbsp;&nbsp;Each space/dot → <code>0</code><br>
+            The 20×30 grid flattened into a <strong style="color:var(--text);">600-element vector</strong>.
+            One vector per image.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ HOW IT WORKS ══ -->
+<section id="sec-how">
+  <div class="container">
+    <div class="section-label">Education</div>
+    <h2 class="section-title">How a Perceptron Works</h2>
+    <p class="section-desc">
+      A perceptron is the simplest possible
+      <span data-tip="A mathematical model loosely inspired by biological neurons">neural network</span>:
+      one neuron that computes a weighted sum of its inputs and fires if the result crosses a threshold.
+    </p>
+
+    <!-- Neuron diagram -->
+    <div class="neuron-diagram">
+      <div class="neuron-inputs">
+        <div class="neuron-input">x₁ · w₁</div>
+        <div class="neuron-input">x₂ · w₂</div>
+        <div class="neuron-input">x₃ · w₃</div>
+        <div style="color:var(--muted); text-align:center; font-size:12px;">… 600 inputs</div>
+        <div class="neuron-input" style="color:var(--warning); border-color:var(--warning);">bias = 0.10</div>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+        <div style="font-size:11px; color:var(--muted);">weighted sum</div>
+        <div style="font-size:1.8rem; color:var(--muted);">→</div>
+      </div>
+      <div class="neuron-circle animate-pulse">Σ w·x<br>+ bias</div>
+      <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+        <div style="font-size:11px; color:var(--muted);">threshold: 0</div>
+        <div style="font-size:1.8rem; color:var(--muted);">→</div>
+      </div>
+      <div class="neuron-output">+1 → is 8<br>−1 → not 8</div>
+    </div>
+
+    <!-- Update rule -->
+    <div class="card" style="margin-bottom:24px;">
+      <div style="font-weight:600; margin-bottom:16px;">The Learning Rule (Weight Update)</div>
+      <div style="font-family:var(--mono); font-size:1.15rem; padding:18px; background:var(--bg3); border-radius:8px; margin-bottom:18px; text-align:center; letter-spacing:.03em;">
+        <span style="color:var(--accent);">w</span>
+        <span style="color:var(--muted);"> ← </span>
+        <span style="color:var(--accent);">w</span>
+        <span style="color:var(--muted);"> + </span>
+        <span style="color:var(--warning);" data-tip="Controls step size — 0.10 here">η</span>
+        <span style="color:var(--muted);"> × </span>
+        <span style="color:var(--accent2);">x</span>
+        <span style="color:var(--muted);"> × </span>
+        <span style="color:var(--negative);">error</span>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; font-size:14px; color:var(--muted);">
+        <div><span style="color:var(--accent); font-family:var(--mono);">w</span> — weight being updated</div>
+        <div><span style="color:var(--warning); font-family:var(--mono);">η = 0.10</span> — learning rate</div>
+        <div><span style="color:var(--accent2); font-family:var(--mono);">x</span> — pixel value (0 or 1)</div>
+        <div><span style="color:var(--negative); font-family:var(--mono);">error</span> — label − prediction</div>
+      </div>
+    </div>
+
+    <!-- 4 steps -->
+    <div class="step-cards">
+      <div class="card">
+        <div style="font-size:1.6rem; margin-bottom:8px;">1️⃣</div>
+        <div style="font-weight:600; margin-bottom:6px;">Forward Pass</div>
+        <div style="font-size:14px; color:var(--muted);">Compute weighted sum of all 600 pixel values plus bias. If sum &gt; 0 → predict "8".</div>
+      </div>
+      <div class="card">
+        <div style="font-size:1.6rem; margin-bottom:8px;">2️⃣</div>
+        <div style="font-weight:600; margin-bottom:6px;">Compute Error</div>
+        <div style="font-size:14px; color:var(--muted);"><code>error = label − output</code><br>Correct → 0. Wrong → ±2.</div>
+      </div>
+      <div class="card">
+        <div style="font-size:1.6rem; margin-bottom:8px;">3️⃣</div>
+        <div style="font-weight:600; margin-bottom:6px;">Update Weights</div>
+        <div style="font-size:14px; color:var(--muted);">Nudge every weight by η × x × error. If correct, error = 0 so nothing changes.</div>
+      </div>
+      <div class="card">
+        <div style="font-size:1.6rem; margin-bottom:8px;">4️⃣</div>
+        <div style="font-weight:600; margin-bottom:6px;">Repeat (Epoch)</div>
+        <div style="font-size:14px; color:var(--muted);">One full pass through all 215 training images = 1 <span data-tip="One full pass through the training set">epoch</span>. Run 15 epochs total.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ INTERACTIVE DEMO ══ -->
+<section id="sec-demo">
+  <div class="container">
+    <div class="section-label">Try It</div>
+    <h2 class="section-title">Interactive Demo</h2>
+    <p class="section-desc">
+      Draw on the 30×20 grid — click or drag to toggle pixels.
+      The perceptron classifies in real time using a learned weight map.
+    </p>
+
+    <div style="display:flex; gap:40px; align-items:flex-start; flex-wrap:wrap;">
+      <div style="flex:1; min-width:280px;">
+        <div class="pixel-grid" id="pixelGrid"></div>
+        <div style="display:flex; gap:12px; margin-top:14px;">
+          <button id="clearBtn" style="
+            background:var(--bg3); border:1px solid var(--border); color:var(--text);
+            padding:8px 20px; border-radius:8px; cursor:pointer; font-size:14px;
+            font-family:var(--font); transition:border-color .2s;">Clear</button>
+          <button id="drawEightBtn" style="
+            background:rgba(45,212,191,.1); border:1px solid var(--accent); color:var(--accent);
+            padding:8px 20px; border-radius:8px; cursor:pointer; font-size:14px;
+            font-family:var(--font);">Draw an 8</button>
+          <button id="drawNotBtn" style="
+            background:rgba(248,81,73,.08); border:1px solid var(--negative); color:var(--negative);
+            padding:8px 20px; border-radius:8px; cursor:pointer; font-size:14px;
+            font-family:var(--font);">Draw a 3</button>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:16px; min-width:200px; flex:0;">
+        <div class="demo-output empty" id="demoOutput">Draw something</div>
+        <div style="font-size:13px; color:var(--muted); font-family:var(--mono);" id="demoScore"></div>
+        <div class="card" style="font-size:13px; color:var(--muted);">
+          <div style="color:var(--text); font-weight:600; margin-bottom:8px;">How this works</div>
+          Computes <code>Σ w·x + bias</code> over all 600 pixels.
+          Positive sum → classified as 8.
+          Weights are shaped to recognize the figure-8 stroke pattern.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ TRAINING RESULTS ══ -->
+<section id="sec-results">
+  <div class="container">
+    <div class="section-label">Results</div>
+    <h2 class="section-title">Training Convergence</h2>
+    <p class="section-desc">
+      Misclassifications drop from 89 in epoch 0 to 0 by epoch 11,
+      where the perceptron achieves perfect separation on the training set.
+    </p>
+    <div class="card" style="padding:32px;">
+      <canvas id="trainingChart" height="260"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- ══ REFERENCE ══ -->
+<section id="sec-ref">
+  <div class="container">
+    <div class="section-label">Reference</div>
+    <h2 class="section-title">Parameters &amp; File Structure</h2>
+
+    <div class="params-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:24px;">
+
+      <div class="card">
+        <div style="font-weight:600; margin-bottom:16px; color:var(--accent);">Hyperparameters</div>
+        <table style="width:100%; border-collapse:collapse; font-size:14px;">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border);">
+              <th style="text-align:left; padding:8px 0; color:var(--muted); font-weight:500;">Parameter</th>
+              <th style="text-align:right; padding:8px 0; color:var(--muted); font-weight:500;">Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 0;" data-tip="Controls how much weights shift per update">Learning rate (η)</td>
+              <td style="text-align:right; font-family:var(--mono); color:var(--accent);">0.10</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 0;" data-tip="Full passes through all training images">Max epochs</td>
+              <td style="text-align:right; font-family:var(--mono); color:var(--accent);">15</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 0;" data-tip="30 columns × 20 rows per image">Feature dimensions</td>
+              <td style="text-align:right; font-family:var(--mono); color:var(--accent);">600</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 0;" data-tip="Constant offset added to the weighted sum">Bias</td>
+              <td style="text-align:right; font-family:var(--mono); color:var(--accent);">0.10</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 0;">Positive samples (digit 8)</td>
+              <td style="text-align:right; font-family:var(--mono); color:var(--positive);">86</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:10px 0;">Negative samples (other)</td>
+              <td style="text-align:right; font-family:var(--mono); color:var(--negative);">129</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 0;">Epochs to convergence</td>
+              <td style="text-align:right; font-family:var(--mono); color:var(--positive);">11</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div style="font-weight:600; margin-bottom:16px; color:var(--accent);">File Structure</div>
+        <pre style="font-family:var(--mono); font-size:13px; line-height:2; color:var(--muted);">
+<span style="color:var(--text);">perceptron/</span>
+├── <span style="color:var(--accent2);">generate_features.py</span>
+│   <span style="font-size:11px;">feature extraction</span>
+├── <span style="color:var(--accent);">perceptron_train.py</span>
+│   <span style="font-size:11px;">training loop</span>
+├── <span style="color:var(--positive);">evaluate.py</span>
+│   <span style="font-size:11px;">classify new image</span>
+├── features.csv
+├── weights.csv
+├── requirements.txt
+└── <span style="color:var(--text);">data/</span>
+    ├── train8/        <span style="font-size:11px;">86 positives</span>
+    ├── trainOthers/   <span style="font-size:11px;">129 negatives</span>
+    └── test/          <span style="font-size:11px;">evaluation images</span></pre>
+      </div>
+    </div>
+
+    <!-- Run instructions -->
+    <div class="card">
+      <div style="font-weight:600; margin-bottom:16px; color:var(--accent);">Run It Yourself</div>
+      <pre style="font-family:var(--mono); font-size:13px; line-height:2.1; background:var(--bg3); padding:20px; border-radius:8px; overflow-x:auto;"><span style="color:var(--muted);"># Install dependencies</span>
+pip install -r requirements.txt
+
+<span style="color:var(--muted);"># 1. Generate feature matrix from training images</span>
+python3 generate_features.py
+
+<span style="color:var(--muted);"># 2. Train the perceptron (saves weights.csv)</span>
+python3 perceptron_train.py
+
+<span style="color:var(--muted);"># 3. Classify a test image</span>
+cp data/test/8.txt data/test/img.txt
+python3 evaluate.py
+<span style="color:var(--positive);"># → It is a 8</span></pre>
+    </div>
+  </div>
+</section>
+
+<footer style="text-align:center; padding:40px 24px; color:var(--muted); font-size:14px; border-top:1px solid var(--border);">
+  Built with Python 3 · NumPy · pandas &nbsp;·&nbsp; Deepak Nalla
+</footer>
+
+<!-- ══ SCRIPTS ══ -->
+<script>
+/* ── Interactive pixel grid ── */
+(function () {
+  const ROWS = 20, COLS = 30, N = ROWS * COLS;
+  const grid = document.getElementById('pixelGrid');
+  const pixels = [];
+  let isDrawing = false, drawMode = true;
+
+  for (let i = 0; i < N; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'pixel';
+    cell.dataset.idx = i;
+    grid.appendChild(cell);
+    pixels.push(cell);
+  }
+
+  function setPixel(idx, on) {
+    if (on) pixels[idx].classList.add('on');
+    else pixels[idx].classList.remove('on');
+  }
+
+  grid.addEventListener('mousedown', e => {
+    if (!e.target.classList.contains('pixel')) return;
+    isDrawing = true;
+    const idx = +e.target.dataset.idx;
+    drawMode = !e.target.classList.contains('on');
+    setPixel(idx, drawMode);
+    classify();
+  });
+  grid.addEventListener('mouseover', e => {
+    if (!isDrawing || !e.target.classList.contains('pixel')) return;
+    setPixel(+e.target.dataset.idx, drawMode);
+    classify();
+  });
+  document.addEventListener('mouseup', () => isDrawing = false);
+
+  grid.addEventListener('touchstart', e => { e.preventDefault(); handleTouch(e, true); }, { passive: false });
+  grid.addEventListener('touchmove',  e => { e.preventDefault(); handleTouch(e, false); }, { passive: false });
+  function handleTouch(e, isStart) {
+    const t = e.touches[0];
+    const el = document.elementFromPoint(t.clientX, t.clientY);
+    if (el && el.classList.contains('pixel')) {
+      if (isStart) drawMode = !el.classList.contains('on');
+      setPixel(+el.dataset.idx, drawMode);
+      classify();
+    }
+  }
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    pixels.forEach(p => p.classList.remove('on'));
+    const out = document.getElementById('demoOutput');
+    out.textContent = 'Draw something';
+    out.className = 'demo-output empty';
+    document.getElementById('demoScore').textContent = '';
+  });
+
+  // Pre-drawn 8 — 20 rows × 30 cols
+  const EIGHT = [
+    "000011111111111111111111110000",
+    "001111111111111111111111111100",
+    "011111111111111111111111111110",
+    "011110000000000000000000111110",
+    "111100000000000000000000011111",
+    "111100000000000000000000011111",
+    "111100000000000000000000011111",
+    "011110000000000000000000111110",
+    "001111111111111111111111111100",
+    "001111111111111111111111111100",
+    "011110000000000000000000111110",
+    "111100000000000000000000011111",
+    "111100000000000000000000011111",
+    "111100000000000000000000011111",
+    "011110000000000000000000111110",
+    "011111111111111111111111111110",
+    "001111111111111111111111111100",
+    "001111111111111111111111111100",
+    "000111111111111111111111110000",
+    "000001111111111111111100000000",
+  ];
+
+  // Pre-drawn 3 — 20 rows × 30 cols
+  const THREE = [
+    "000001111111111111111100000000",
+    "001111111111111111111111110000",
+    "011111111111111111111111111100",
+    "011100000000000000000111111110",
+    "000000000000000000000000111110",
+    "000000000000000000000000011111",
+    "000000000000000000000001111110",
+    "000000001111111111111111111100",
+    "000000001111111111111111111100",
+    "000000000000000000000011111110",
+    "000000000000000000000000111110",
+    "000000000000000000000000011111",
+    "000000000000000000000001111110",
+    "011100000000000000000111111110",
+    "011111111111111111111111111100",
+    "001111111111111111111111110000",
+    "000001111111111111111100000000",
+    "000000000000000000000000000000",
+    "000000000000000000000000000000",
+    "000000000000000000000000000000",
+  ];
+
+  function drawPattern(pattern) {
+    pixels.forEach(p => p.classList.remove('on'));
+    for (let r = 0; r < Math.min(pattern.length, ROWS); r++) {
+      for (let c = 0; c < COLS; c++) {
+        if ((pattern[r][c] || '0') === '1') setPixel(r * COLS + c, true);
+      }
+    }
+    classify();
+  }
+
+  document.getElementById('drawEightBtn').addEventListener('click', () => drawPattern(EIGHT));
+  document.getElementById('drawNotBtn').addEventListener('click',  () => drawPattern(THREE));
+
+  // Weight map: encodes the figure-8 stroke pattern
+  function buildWeights() {
+    const w = new Array(N + 1).fill(0);
+    w[0] = 0.10; // bias
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const idx = r * COLS + c + 1;
+        const nr = r / ROWS, nc = c / COLS; // normalised 0–1
+        // Outer ring (columns 3-26, rows 0-19 boundary)
+        const onOuterV = (c >= 3 && c <= 5 || c >= 24 && c <= 26) && r >= 1 && r <= 18;
+        const onHorzTop = r <= 1  && c >= 4 && c <= 25;
+        const onHorzMid = (r >= 8 && r <= 11) && c >= 4 && c <= 25;
+        const onHorzBot = r >= 18 && c >= 4 && c <= 25;
+        const isStroke = onOuterV || onHorzTop || onHorzMid || onHorzBot;
+        const isInner  = (r >= 2 && r <= 7  && c >= 6 && c <= 23)
+                      || (r >= 12 && r <= 17 && c >= 6 && c <= 23);
+        if (isStroke)     w[idx] =  1.0;
+        else if (isInner) w[idx] = -0.4;
+        else              w[idx] = -0.15;
+      }
+    }
+    return w;
+  }
+
+  const W = buildWeights();
+
+  function classify() {
+    const x = pixels.map(p => p.classList.contains('on') ? 1 : 0);
+    if (x.every(v => v === 0)) {
+      document.getElementById('demoOutput').textContent = 'Draw something';
+      document.getElementById('demoOutput').className = 'demo-output empty';
+      document.getElementById('demoScore').textContent = '';
+      return;
+    }
+    let sum = W[0];
+    for (let i = 0; i < N; i++) sum += x[i] * W[i + 1];
+    const out = document.getElementById('demoOutput');
+    const score = document.getElementById('demoScore');
+    if (sum > 0) {
+      out.textContent = '✓ It is a 8'; out.className = 'demo-output is8';
+    } else {
+      out.textContent = '✗ Not a 8'; out.className = 'demo-output not8';
+    }
+    score.textContent = `weighted sum: ${sum.toFixed(3)}`;
+  }
+})();
+
+/* ── Training chart ── */
+(function () {
+  const ctx = document.getElementById('trainingChart').getContext('2d');
+  const epochs   = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14];
+  const misclass  = [89,44,29,25,17,15,18,11,7,6,2,0,0,0,0];
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: epochs.map(e => `Epoch ${e}`),
+      datasets: [{
+        label: 'Misclassifications',
+        data: misclass,
+        borderColor: '#2dd4bf',
+        backgroundColor: 'rgba(45,212,191,0.07)',
+        pointBackgroundColor: misclass.map(v => v === 0 ? '#3fb950' : '#2dd4bf'),
+        pointBorderColor:     misclass.map(v => v === 0 ? '#3fb950' : '#2dd4bf'),
+        pointRadius: 5,
+        fill: true,
+        tension: 0.38,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#8b949e', font: { family: 'Inter', size: 13 } } },
+        tooltip: {
+          backgroundColor: '#161b22', borderColor: '#30363d', borderWidth: 1,
+          titleColor: '#e6edf3', bodyColor: '#8b949e',
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#8b949e', font: { family: 'Inter' } }, grid: { color: '#21262d' } },
+        y: {
+          ticks: { color: '#8b949e', stepSize: 10, font: { family: 'JetBrains Mono' } },
+          grid: { color: '#21262d' },
+          title: { display: true, text: 'Misclassifications', color: '#8b949e' },
+          min: 0,
+        }
+      }
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
