@@ -1,0 +1,10 @@
+# .DS_Store files are intentionally kept in this repository for posterity.
+# They preserve the original macOS Finder metadata from when this project
+# was first created (August 2023) and are retained as-is.
+!.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
