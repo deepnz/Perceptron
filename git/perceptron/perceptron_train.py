@@ -17,7 +17,7 @@ def find_sum(x_vec, weights: list[float]) -> float:
 
 
 def update_weight(x_vec, weights: list[float], error: float, learning_rate: float) -> list[float]:
-    for i in range(len(weights) - 1):
+    for i in range(len(x_vec)):
         weights[i + 1] = weights[i + 1] + learning_rate * x_vec[i] * error
     return weights
 
@@ -32,7 +32,7 @@ while epoch < MAX_ITERATIONS:
     print(f"epoch: {epoch}")
     num_mis = 0
     for i in range(len(training_features)):
-        x_vec = training_features.iloc[i]
+        x_vec = training_features.iloc[i].to_numpy()
         label = labels[i]
         output = 1 if find_sum(x_vec, WEIGHTS) > 0 else -1
         error = label - output

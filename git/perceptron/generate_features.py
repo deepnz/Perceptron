@@ -1,13 +1,9 @@
 # -*- coding: utf-8 -*-
 
+import os
 import numpy as np
 import pandas as pd
 
-NUM_POS = 87
-NUM_NEG = 130
-pos_labels = [1] * NUM_POS
-neg_labels = [-1] * NUM_NEG
-pos_labels.extend(neg_labels)
 
 def load_image(path: str) -> np.ndarray:
     temp = [[0 for _ in range(30)] for _ in range(20)]
@@ -19,8 +15,21 @@ def load_image(path: str) -> np.ndarray:
                 temp[i][j] = 1
     return np.array(temp).reshape(600)
 
-pos_features = [load_image(f"data/train8/{k}.txt") for k in range(1, NUM_POS + 1)]
-neg_features = [load_image(f"data/trainOthers/{k}.txt") for k in range(1, NUM_NEG + 1)]
+
+def load_dir(directory: str) -> tuple[list[np.ndarray], int]:
+    files = sorted(
+        [f for f in os.listdir(directory) if f.endswith(".txt")],
+        key=lambda f: int(f.replace(".txt", ""))
+    )
+    return [load_image(os.path.join(directory, f)) for f in files], len(files)
+
+
+pos_features, NUM_POS = load_dir("data/train8")
+neg_features, NUM_NEG = load_dir("data/trainOthers")
+
+pos_labels = [1] * NUM_POS
+neg_labels = [-1] * NUM_NEG
+pos_labels.extend(neg_labels)
 
 features = pd.concat([
     pd.DataFrame(pos_features),
